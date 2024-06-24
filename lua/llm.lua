@@ -2,6 +2,8 @@ local nio = require("nio")
 local M = {}
 
 local timeout_ms = 10000
+local streaming_mode = false
+local cancel_streaming = false
 
 local service_lookup = {
 	groq = {
@@ -32,6 +34,12 @@ function M.setup(opts)
 			service_lookup[key] = service
 		end
 	end
+	vim.api.nvim_set_keymap(
+		"n",
+		"<leader>x",
+		':lua require("llm").exit_streaming_mode()<CR>',
+		{ noremap = true, silent = true }
+	)
 end
 
 function M.get_lines_until_cursor()
@@ -90,18 +98,35 @@ local function process_sse_response(response, service)
 	local has_tokens = false
 	local start_time = vim.uv.hrtime()
 
+	streaming_mode = true
+	cancel_streaming = false
+
+	nio.run(function()
+		while streaming_mode do
+			nio.sleep(100)
+			if cancel_streaming then
+				response.stdout.close()
+				streaming_mode = false
+				print("Streaming cancelled.")
+				return
+			end
+		end
+	end)
+
 	nio.run(function()
 		nio.sleep(timeout_ms)
 		if not has_tokens then
 			response.stdout.close()
+			streaming_mode = false
 			print("llm.nvim has timed out!")
 		end
 	end)
-	local done = false
-	while not done do
+
+	while streaming_mode do
 		local current_time = vim.uv.hrtime()
 		local elapsed = (current_time - start_time)
 		if elapsed >= timeout_ms * 1000000 and not has_tokens then
+			streaming_mode = false
 			return
 		end
 		local chunk = response.stdout.read(1024)
@@ -117,7 +142,7 @@ local function process_sse_response(response, service)
 
 		buffer = buffer:sub(#table.concat(lines, "\n") + 1)
 
-		done = process_data_lines(lines, service, function(data)
+		local done = process_data_lines(lines, service, function(data)
 			local content
 			if service == "anthropic" then
 				if data.delta and data.delta.text then
@@ -133,6 +158,10 @@ local function process_sse_response(response, service)
 				write_string_at_cursor(content)
 			end
 		end)
+
+		if done then
+			streaming_mode = false
+		end
 	end
 end
 
@@ -141,24 +170,12 @@ function M.prompt(opts)
 	local service = opts.service
 	local prompt = ""
 	local visual_lines = M.get_visual_selection()
-	local system_prompt = [[
-You are an AI programming assistant integrated into a code editor. Your purpose is to help the user with programming tasks as they write code.
-Key capabilities:
-- Thoroughly analyze the user's code and provide insightful suggestions for improvements related to best practices, performance, readability, and maintainability. Explain your reasoning.
-- Answer coding questions in detail, using examples from the user's own code when relevant. Break down complex topics step-by-step.
-- Spot potential bugs and logical errors. Alert the user and suggest fixes.
-- Upon request, add helpful comments explaining complex or unclear code.
-- Suggest relevant documentation, StackOverflow answers, and other resources related to the user's code and questions.
-- Engage in back-and-forth conversations to understand the user's intent and provide the most helpful information.
-- Keep concise and use markdown.
-- When asked to create code, only generate the code. No bugs.
-- Think step by step
-    ]]
+	local found_service = service_lookup[service]
+	local system_prompt = found_service and found_service.system_prompt
+		or [[ In the voice of an angry pirate, yell at me and tell me that i haven't set up my system prompt]]
 	if visual_lines then
 		prompt = table.concat(visual_lines, "\n")
 		if replace then
-			system_prompt =
-				"Follow the instructions in the code comments. Generate code only. Think step by step. If you must speak, do so in comments. Generate valid code only."
 			vim.api.nvim_command("normal! d")
 			vim.api.nvim_command("normal! k")
 		else
@@ -172,7 +189,6 @@ Key capabilities:
 	local model = ""
 	local api_key_name = ""
 
-	local found_service = service_lookup[service]
 	if found_service then
 		url = found_service.url
 		api_key_name = found_service.api_key_name
@@ -245,9 +261,19 @@ Key capabilities:
 		args = args,
 	})
 	nio.run(function()
-		nio.api.nvim_command("normal! o")
+		vim.api.nvim_command("normal! o")
 		process_sse_response(response, service)
 	end)
+end
+
+function M.exit_streaming_mode()
+	if streaming_mode then
+		cancel_streaming = true
+		vim.cmd("stopinsert")
+		print("Exiting streaming mode...")
+	else
+		print("Not in streaming mode.")
+	end
 end
 
 function M.get_visual_selection()
