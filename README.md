@@ -1,4 +1,6 @@
 # (yacine's fork of) llm.nvim
+## Mostly unmaintained, use the main branch
+## I will not look at issues or comments
 
 A neovim plugin for no frills LLM-assisted programming.
 
@@ -94,7 +96,7 @@ Before using the plugin, set any of `GROQ_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC
 lazy.nvim
 ```lua
 {
-    "melbaldove/llm.nvim",
+    "yacineMTB/llm.nvim",
     dependencies = { "nvim-neotest/nvim-nio" }
 }
 ```
