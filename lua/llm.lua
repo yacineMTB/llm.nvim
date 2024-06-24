@@ -60,7 +60,7 @@ local function process_data_lines(lines, service, process_data)
 				return true
 			end
 			local data = vim.json.decode(json_str)
-			if service == "anthropic" then
+			if string.find(service, "anthropic") then
 				stop = data.type == "message_stop"
 			end
 			if stop then
@@ -128,7 +128,7 @@ local function process_sse_response(response, service)
 
 		local done = process_data_lines(lines, service, function(data)
 			local content
-			if service == "anthropic" then
+			if string.find(service, "anthropic") then
 				if data.delta and data.delta.text then
 					content = data.delta.text
 				end
@@ -155,7 +155,7 @@ function M.prompt(opts)
 	local prompt = ""
 	local visual_lines = M.get_visual_selection()
 	local found_service = service_lookup[service]
-	local system_prompt = found_service and found_service.system_prompt
+	local system_prompt = found_service.system_prompt
 		or [[ In the voice of an angry pirate, yell at me and tell me that i haven't set up my system prompt]]
 	if visual_lines then
 		prompt = table.concat(visual_lines, "\n")
@@ -185,7 +185,7 @@ function M.prompt(opts)
 	local api_key = api_key_name and get_api_key(api_key_name)
 
 	local data
-	if service == "anthropic" then
+	if string.find(service, "anthropic") then
 		data = {
 			system = system_prompt,
 			messages = {
@@ -227,7 +227,7 @@ function M.prompt(opts)
 	}
 
 	if api_key then
-		if service == "anthropic" then
+		if string.find(service, "anthropic") then
 			table.insert(args, "-H")
 			table.insert(args, "x-api-key: " .. api_key)
 			table.insert(args, "-H")
