@@ -1,9 +1,10 @@
 local nio = require("nio")
 local M = {}
 
-local timeout_ms = 10000
+local timeout_ms = 20000
 local streaming_mode = false
 local cancel_streaming = false
+local curl_max_time = 15 -- default value
 
 local service_lookup = {}
 
@@ -66,7 +67,6 @@ local function process_data_lines(lines, service, process_data)
 			if stop then
 				return true
 			else
-				nio.sleep(5)
 				vim.schedule(function()
 					vim.cmd("undojoin")
 					process_data(data)
@@ -87,22 +87,13 @@ local function process_sse_response(response, service)
 
 	nio.run(function()
 		while streaming_mode do
-			nio.sleep(100)
+			nio.sleep(500)
 			if cancel_streaming then
 				response.stdout.close()
 				streaming_mode = false
 				print("Streaming cancelled.")
 				return
 			end
-		end
-	end)
-
-	nio.run(function()
-		nio.sleep(timeout_ms)
-		if not has_tokens then
-			response.stdout.close()
-			streaming_mode = false
-			print("llm.nvim has timed out!")
 		end
 	end)
 
@@ -113,7 +104,9 @@ local function process_sse_response(response, service)
 			streaming_mode = false
 			return
 		end
-		local chunk = response.stdout.read(1024)
+
+		nio.sleep(100)
+		local chunk = response.stdout.read(4096)
 		if chunk == nil then
 			break
 		end
@@ -196,7 +189,7 @@ function M.prompt(opts)
 			},
 			model = model,
 			stream = true,
-			max_tokens = 1024,
+			max_tokens = 4096,
 		}
 	else
 		data = {

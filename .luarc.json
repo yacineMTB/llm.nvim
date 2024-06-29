@@ -1,0 +1,8 @@
+{
+    "workspace.library": [
+        "/Users/kache/.local/share/nvim/lazy/neodev.nvim/types/nightly",
+        "/Users/kache/opt/nvim-macos-arm64/share/nvim/runtime/lua",
+        "/Users/kache/Repos/llm.nvim/lua",
+        "${3rd}/luv/library"
+    ]
+}
